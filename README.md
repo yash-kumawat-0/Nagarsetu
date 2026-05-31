@@ -256,18 +256,25 @@ http://localhost:5173
 
 ---
 
-# 👨‍💻 Contributors
+# 📬 Contact Me
 
-**Yash Kumawat**
+If you'd like to discuss this project, collaborate, or connect professionally, feel free to reach out.
 
-📧 [kumawatyash378@gmail.com](mailto:kumawatyash378@gmail.com)
+### 👨‍💻 Yash Kumawat
 
-💼 LinkedIn: yashkumawat27
+📧 **Email:** [kumawatyash378@gmail.com](mailto:kumawatyash378@gmail.com)
+
+💼 **LinkedIn:** https://www.linkedin.com/in/yashkumawat27
+
+🐙 **GitHub:** https://github.com/yash-kumawat-0
+
+🌐 **Live Application:** https://nagarsetu-gamma.vercel.app/
 
 ---
 
-<div align="center">
+### Open To
 
-### ⭐ If you found this project useful, consider giving it a star.
-
-</div>
+* Full Stack Development Opportunities
+* MERN Stack Internships
+* Open Source Collaboration
+* AI & Machine Learning Projects
