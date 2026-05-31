@@ -7,23 +7,29 @@ const seedDepartments = require('./src/config/seedDepartments');
 // Load environment variables FIRST before anything else
 dotenv.config();
 
-// ─── CORS Configuration ──────────────────────────────────────
-// Restricts cross-origin requests to known frontend origins only.
-// Add origins to the allowedOrigins array as needed.
+// ─── Required Environment Variable Check ─────────────────────
+// Fail fast with a clear error if critical vars are missing.
+const REQUIRED_ENV = ['MONGO_URI', 'JWT_SECRET'];
+const missingVars = REQUIRED_ENV.filter((key) => !process.env[key]);
+if (missingVars.length > 0) {
+  console.error('❌ Missing required environment variables:', missingVars.join(', '));
+  console.error('   Set them in your Render dashboard → Environment section.');
+  process.exit(1);
+}
+
+// ─── CORS Configuration ───────────────────────────────────────
 const allowedOrigins = [
-  process.env.CLIENT_ORIGIN,           // Production: Vercel
-  'http://localhost:5173',             // Local dev: Vite default port
-  'http://localhost:5174',             // Local dev: Vite alt port
-  'http://localhost:3000',             // Local dev: CRA / alternate
-].filter(Boolean); // removes undefined if CLIENT_ORIGIN not set
+  process.env.CLIENT_ORIGIN,      // Production Vercel URL
+  'http://localhost:5173',         // Vite dev default
+  'http://localhost:5174',         // Vite dev alt
+  'http://localhost:3000',
+].filter(Boolean);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (Render health checks, Postman, mobile apps)
+    // Allow no-origin requests (Render health checks, curl, Postman)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+    if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`CORS: Origin '${origin}' not allowed`));
   },
   credentials: true,
@@ -31,20 +37,15 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
-// Connect to MongoDB Atlas
-connectDB().then(() => {
-  seedDepartments();
-});
-
+// ─── App Setup ────────────────────────────────────────────────
 const app = express();
 
-// ─── Middleware ──────────────────────────────────────────────
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Handle preflight requests
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ─── Security Headers ────────────────────────────────────────
+// ─── Security Headers ─────────────────────────────────────────
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -52,7 +53,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ─── API Routes ──────────────────────────────────────────────
+// ─── API Routes ───────────────────────────────────────────────
 app.use('/api/auth',          require('./src/routes/authRoutes'));
 app.use('/api/complaints',    require('./src/routes/complaintRoutes'));
 app.use('/api/admin',         require('./src/routes/adminRoutes'));
@@ -60,26 +61,24 @@ app.use('/api/officer',       require('./src/routes/officerRoutes'));
 app.use('/api/comments',      require('./src/routes/commentRoutes'));
 app.use('/api/notifications', require('./src/routes/notificationRoutes'));
 
-// ─── Health Check ────────────────────────────────────────────
+// ─── Health Check ─────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     message: 'NagarSetu API is running',
-    environment: process.env.NODE_ENV,
+    environment: process.env.NODE_ENV || 'development',
     timestamp: new Date().toISOString(),
   });
 });
 
-// ─── 404 Handler ─────────────────────────────────────────────
+// ─── 404 Handler ──────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} not found` });
 });
 
-// ─── Global Error Handler ────────────────────────────────────
+// ─── Global Error Handler ─────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(`[Error] ${err.message}`);
-
-  // Do NOT leak stack traces in production
   const isDev = process.env.NODE_ENV === 'development';
   res.status(err.status || 500).json({
     message: err.message || 'Something went wrong!',
@@ -87,9 +86,15 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ─── Start Server ────────────────────────────────────────────
+// ─── Start: Listen first, then connect DB ────────────────────
+// Render requires the process to bind to PORT quickly.
+// DB connection happens after the server is already listening.
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 NagarSetu Server running on port ${PORT} [${process.env.NODE_ENV}]`);
-  console.log(`🌐 Allowed origins: ${allowedOrigins.join(', ')}`);
+app.listen(PORT, async () => {
+  console.log(`🚀 NagarSetu Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+  console.log(`🌐 Allowed origins: ${allowedOrigins.join(', ') || 'localhost only'}`);
+
+  // Connect to MongoDB after server is up
+  await connectDB();
+  await seedDepartments();
 });
