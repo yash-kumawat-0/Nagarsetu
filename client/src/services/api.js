@@ -1,10 +1,22 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api';
+// ─── Centralized API Configuration ───────────────────────────
+// Reads the backend URL from the VITE_API_URL environment variable.
+// In development, Vite loads .env.development automatically.
+// In production, set VITE_API_URL on your hosting platform (Render / Vercel).
+const API_URL = import.meta.env.VITE_API_URL || '/api';
+
+if (!import.meta.env.VITE_API_URL) {
+  console.warn(
+    '[NagarSetu] VITE_API_URL is not set — falling back to "/api". ' +
+    'Set it in your .env file or hosting environment variables.'
+  );
+}
 
 const api = axios.create({
   baseURL: API_URL,
-  headers: { 'Content-Type': 'application/json' }
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 30000,  // 30-second timeout for production reliability
 });
 
 // Request interceptor to add token

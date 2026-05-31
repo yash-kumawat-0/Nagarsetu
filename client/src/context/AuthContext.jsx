@@ -1,10 +1,12 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import axios from 'axios';
+import api, { authAPI } from '../services/api';
 
 const AuthContext = createContext();
 
-const API_URL = 'http://localhost:5000/api';
-
+// ─── Auth Provider ───────────────────────────────────────────
+// Uses the centralized API client from services/api.js.
+// No hardcoded URLs — everything flows through the shared Axios instance
+// which reads VITE_API_URL from the environment.
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
@@ -20,9 +22,7 @@ export const AuthProvider = ({ children }) => {
 
   const fetchProfile = async () => {
     try {
-      const res = await axios.get(`${API_URL}/auth/profile`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await authAPI.getProfile();
       setUser(res.data);
     } catch (error) {
       localStorage.removeItem('token');
@@ -34,7 +34,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (email, password) => {
-    const res = await axios.post(`${API_URL}/auth/login`, { email, password });
+    const res = await authAPI.login({ email, password });
     const data = res.data;
     localStorage.setItem('token', data.token);
     setToken(data.token);
@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (userData) => {
-    const res = await axios.post(`${API_URL}/auth/register`, userData);
+    const res = await authAPI.register(userData);
     const data = res.data;
     localStorage.setItem('token', data.token);
     setToken(data.token);

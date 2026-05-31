@@ -4,44 +4,92 @@ const dotenv = require('dotenv');
 const connectDB = require('./src/config/db');
 const seedDepartments = require('./src/config/seedDepartments');
 
-// Load environment variables
+// Load environment variables FIRST before anything else
 dotenv.config();
 
-// Connect to MongoDB
+// ─── CORS Configuration ──────────────────────────────────────
+// Restricts cross-origin requests to known frontend origins only.
+// Add origins to the allowedOrigins array as needed.
+const allowedOrigins = [
+  process.env.CLIENT_ORIGIN,           // Production: Vercel
+  'http://localhost:5173',             // Local dev: Vite default port
+  'http://localhost:5174',             // Local dev: Vite alt port
+  'http://localhost:3000',             // Local dev: CRA / alternate
+].filter(Boolean); // removes undefined if CLIENT_ORIGIN not set
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Render health checks, Postman, mobile apps)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error(`CORS: Origin '${origin}' not allowed`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+// Connect to MongoDB Atlas
 connectDB().then(() => {
   seedDepartments();
 });
 
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// ─── Middleware ──────────────────────────────────────────────
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Handle preflight requests
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// API Routes
-app.use('/api/auth', require('./src/routes/authRoutes'));
-app.use('/api/complaints', require('./src/routes/complaintRoutes'));
-app.use('/api/admin', require('./src/routes/adminRoutes'));
-app.use('/api/officer', require('./src/routes/officerRoutes'));
-app.use('/api/comments', require('./src/routes/commentRoutes'));
-app.use('/api/notifications', require('./src/routes/notificationRoutes'));
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'NagarSetu API is running' });
+// ─── Security Headers ────────────────────────────────────────
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
-    message: 'Something went wrong!',
-    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+// ─── API Routes ──────────────────────────────────────────────
+app.use('/api/auth',          require('./src/routes/authRoutes'));
+app.use('/api/complaints',    require('./src/routes/complaintRoutes'));
+app.use('/api/admin',         require('./src/routes/adminRoutes'));
+app.use('/api/officer',       require('./src/routes/officerRoutes'));
+app.use('/api/comments',      require('./src/routes/commentRoutes'));
+app.use('/api/notifications', require('./src/routes/notificationRoutes'));
+
+// ─── Health Check ────────────────────────────────────────────
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'NagarSetu API is running',
+    environment: process.env.NODE_ENV,
+    timestamp: new Date().toISOString(),
   });
 });
 
+// ─── 404 Handler ─────────────────────────────────────────────
+app.use((req, res) => {
+  res.status(404).json({ message: `Route ${req.originalUrl} not found` });
+});
+
+// ─── Global Error Handler ────────────────────────────────────
+app.use((err, req, res, next) => {
+  console.error(`[Error] ${err.message}`);
+
+  // Do NOT leak stack traces in production
+  const isDev = process.env.NODE_ENV === 'development';
+  res.status(err.status || 500).json({
+    message: err.message || 'Something went wrong!',
+    ...(isDev && { stack: err.stack }),
+  });
+});
+
+// ─── Start Server ────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 NagarSetu Server running on port ${PORT}`);
+  console.log(`🚀 NagarSetu Server running on port ${PORT} [${process.env.NODE_ENV}]`);
+  console.log(`🌐 Allowed origins: ${allowedOrigins.join(', ')}`);
 });

@@ -1,4 +1,5 @@
 const Department = require('../models/Department');
+const User = require('../models/User');
 
 const departments = [
   {
@@ -63,6 +64,26 @@ const seedDepartments = async () => {
     if (count === 0) {
       await Department.insertMany(departments);
       console.log('✅ Departments seeded successfully');
+    }
+    // Seed admin user (uses environment variables if provided)
+    try {
+      const adminEmail = process.env.ADMIN_EMAIL || 'admin@nagarsetu.local';
+      const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
+      const adminExists = await User.findOne({ email: adminEmail });
+      if (!adminExists) {
+        await User.create({
+          name: 'Administrator',
+          email: adminEmail,
+          password: adminPassword,
+          role: 'admin',
+          phone: ''
+        });
+        console.log(`✅ Admin user seeded: ${adminEmail}`);
+      } else {
+        console.log(`Admin user already exists: ${adminEmail}`);
+      }
+    } catch (err) {
+      console.error('Error seeding admin user:', err.message);
     }
   } catch (error) {
     console.error('Error seeding departments:', error.message);
