@@ -1,33 +1,21 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const connectDB = require('./src/config/db');
-const seedDepartments = require('./src/config/seedDepartments');
 
-// Load environment variables FIRST before anything else
+// Load environment variables (no-op on Render since .env is gitignored,
+// but Render injects env vars from dashboard automatically)
 dotenv.config();
-
-// ─── Required Environment Variable Check ─────────────────────
-// Fail fast with a clear error if critical vars are missing.
-const REQUIRED_ENV = ['MONGO_URI', 'JWT_SECRET'];
-const missingVars = REQUIRED_ENV.filter((key) => !process.env[key]);
-if (missingVars.length > 0) {
-  console.error('❌ Missing required environment variables:', missingVars.join(', '));
-  console.error('   Set them in your Render dashboard → Environment section.');
-  process.exit(1);
-}
 
 // ─── CORS Configuration ───────────────────────────────────────
 const allowedOrigins = [
-  process.env.CLIENT_ORIGIN,      // Production Vercel URL
-  'http://localhost:5173',         // Vite dev default
-  'http://localhost:5174',         // Vite dev alt
+  process.env.CLIENT_ORIGIN,
+  'http://localhost:5173',
+  'http://localhost:5174',
   'http://localhost:3000',
 ].filter(Boolean);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow no-origin requests (Render health checks, curl, Postman)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`CORS: Origin '${origin}' not allowed`));
@@ -45,7 +33,7 @@ app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ─── Security Headers ─────────────────────────────────────────
+// Security Headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -63,10 +51,15 @@ app.use('/api/notifications', require('./src/routes/notificationRoutes'));
 
 // ─── Health Check ─────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
+  const mongoose = require('mongoose');
   res.json({
     status: 'ok',
     message: 'NagarSetu API is running',
-    environment: process.env.NODE_ENV || 'development',
+    environment: process.env.NODE_ENV || 'not set',
+    mongoStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    hasMongoURI: !!process.env.MONGO_URI,
+    hasJWTSecret: !!process.env.JWT_SECRET,
+    hasClientOrigin: !!process.env.CLIENT_ORIGIN,
     timestamp: new Date().toISOString(),
   });
 });
@@ -78,23 +71,33 @@ app.use((req, res) => {
 
 // ─── Global Error Handler ─────────────────────────────────────
 app.use((err, req, res, next) => {
-  console.error(`[Error] ${err.message}`);
-  const isDev = process.env.NODE_ENV === 'development';
+  console.error('[Error]', err.message);
   res.status(err.status || 500).json({
     message: err.message || 'Something went wrong!',
-    ...(isDev && { stack: err.stack }),
   });
 });
 
-// ─── Start: Listen first, then connect DB ────────────────────
-// Render requires the process to bind to PORT quickly.
-// DB connection happens after the server is already listening.
+// ─── Start Server ─────────────────────────────────────────────
+// CRITICAL: Bind to PORT immediately so Render doesn't kill the process.
+// DB connection happens AFTER the server is already listening.
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, async () => {
-  console.log(`🚀 NagarSetu Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
-  console.log(`🌐 Allowed origins: ${allowedOrigins.join(', ') || 'localhost only'}`);
+app.listen(PORT, () => {
+  console.log('🚀 NagarSetu Server running on port ' + PORT);
 
-  // Connect to MongoDB after server is up
-  await connectDB();
-  await seedDepartments();
+  // Check env vars (warn only, don't exit)
+  if (!process.env.MONGO_URI) {
+    console.error('⚠ MONGO_URI is not set! Set it in Render dashboard → Environment');
+  }
+  if (!process.env.JWT_SECRET) {
+    console.error('⚠ JWT_SECRET is not set! Set it in Render dashboard → Environment');
+  }
+
+  // Connect to MongoDB (non-blocking, won't crash the server)
+  if (process.env.MONGO_URI) {
+    const connectDB = require('./src/config/db');
+    const seedDepartments = require('./src/config/seedDepartments');
+    connectDB()
+      .then(() => seedDepartments())
+      .catch((err) => console.error('MongoDB setup error:', err.message));
+  }
 });
